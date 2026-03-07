@@ -4,3 +4,4 @@ ffmpeg-python
 numpy
 opencv-python-headless
 gunicorn
+yt-dlp
