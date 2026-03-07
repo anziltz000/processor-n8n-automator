@@ -1,6 +1,5 @@
 Flask
 requests
-yt-dlp
 ffmpeg-python
 numpy
 opencv-python-headless
