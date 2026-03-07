@@ -15,5 +15,4 @@ COPY . /app
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Start the API using Gunicorn with a massive 10-minute timeout
-# Render automatically looks for web services on the port we bind here
 CMD ["gunicorn", "-b", "0.0.0.0:10000", "--timeout", "600", "processor_api:app"]
