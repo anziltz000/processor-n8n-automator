@@ -77,11 +77,13 @@ def process_task(video_url, campaign_key, position_key, reply_webhook_url):
 
         if camp_data['type'] == 'video':
             asset_path = os.path.join(ASSETS_DIR, camp_data['file'])
-            overlay_layer = ffmpeg.input(asset_path).filter('colorkey', camp_data['chroma'], 0.3, 0.2).filter('scale', 550, -1)
+            # Changed -1 to -2 to prevent odd-pixel crash
+            overlay_layer = ffmpeg.input(asset_path).filter('colorkey', camp_data['chroma'], 0.3, 0.2).filter('scale', 550, -2)
         elif camp_data['type'] == 'smart_image':
             brightness = get_brightness(input_path)
             logo_filename = f"Betstrike_logo_{'black' if brightness > 128 else 'white'}.png"
-            overlay_layer = ffmpeg.input(os.path.join(ASSETS_DIR, logo_filename)).filter('scale', 550, -1)
+            # Changed -1 to -2 to prevent odd-pixel crash
+            overlay_layer = ffmpeg.input(os.path.join(ASSETS_DIR, logo_filename)).filter('scale', 550, -2)
 
         pos_map = {
             'top': ('(main_w-overlay_w)/2', '120'),
@@ -93,7 +95,8 @@ def process_task(video_url, campaign_key, position_key, reply_webhook_url):
 
         final_video_stream = processed_video.overlay(overlay_layer, x=x_val, y=y_val)
 
-        output_args = {'t': '59', 'vcodec': 'libx264', 'crf': 23, 'preset': 'fast'}
+        # Added pix_fmt: yuv420p to ensure universal output compatibility
+        output_args = {'t': '59', 'vcodec': 'libx264', 'pix_fmt': 'yuv420p', 'crf': 23, 'preset': 'fast'}
         if has_audio:
             output_stream = ffmpeg.output(final_video_stream, input_stream.audio, output_path, **output_args, acodec='aac')
         else:
@@ -110,6 +113,9 @@ def process_task(video_url, campaign_key, position_key, reply_webhook_url):
 
         print("✅ Delivery Successful!", flush=True)
 
+    # --- THE NEW ERROR CATCHER ---
+    except ffmpeg.Error as e:
+        print(f"❌ FFmpeg Error: {e.stderr.decode('utf8') if e.stderr else str(e)}", flush=True)
     except Exception as e:
         print(f"❌ Processing Error: {str(e)}", flush=True)
 
