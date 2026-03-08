@@ -13,7 +13,7 @@ app = Flask(__name__)
 
 # --- CONFIGURATION ---
 WORKSPACE_DIR = "/tmp/workspace"
-ASSETS_DIR = "./assets" 
+ASSETS_DIR = "./shared/assets/Campaigns" 
 
 os.makedirs(WORKSPACE_DIR, exist_ok=True)
 os.makedirs(ASSETS_DIR, exist_ok=True)
@@ -171,3 +171,4 @@ def process_video_api():
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
+
