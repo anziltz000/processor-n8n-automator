@@ -96,7 +96,7 @@ def process_task(video_url, campaign_key, position_key, reply_webhook_url):
         final_video_stream = processed_video.overlay(overlay_layer, x=x_val, y=y_val)
 
         # Added pix_fmt: yuv420p to ensure universal output compatibility
-        output_args = {'t': '59', 'vcodec': 'libx264', 'pix_fmt': 'yuv420p', 'crf': 23, 'preset': 'fast'}
+        output_args = {'t': '59', 'vcodec': 'libx264', 'pix_fmt': 'yuv420p', 'crf': 25, 'preset': 'ultrafast', 'threads': '1', 'r': '30'}
         if has_audio:
             output_stream = ffmpeg.output(final_video_stream, input_stream.audio, output_path, **output_args, acodec='aac')
         else:
@@ -171,4 +171,5 @@ def process_video_api():
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
+
 
