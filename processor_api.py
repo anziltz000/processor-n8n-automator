@@ -27,7 +27,6 @@ CAMPAIGN_CONFIG = {
 }
 
 # --- THE QUEUE SYSTEM ---
-# This ensures Render only ever processes 1 video at a time to prevent memory crashes
 task_queue = queue.Queue()
 
 def get_brightness(video_path):
@@ -46,10 +45,12 @@ def get_brightness(video_path):
         print(f"Warning: Brightness calc failed: {e}", flush=True)
         return 128 
 
-def process_task(video_url, campaign_key, position_key, reply_webhook_url):
+# ADDED target_key to arguments
+def process_task(video_url, campaign_key, position_key, target_key, reply_webhook_url):
     timestamp = int(time.time())
     input_path = os.path.join(WORKSPACE_DIR, f"raw_{timestamp}.mp4")
     output_path = os.path.join(WORKSPACE_DIR, f"final_{timestamp}.mp4")
+    caption = "No caption found" # Default fallback
 
     try:
         print(f"📥 [Step 1] Downloading: {video_url}", flush=True)
@@ -61,7 +62,9 @@ def process_task(video_url, campaign_key, position_key, reply_webhook_url):
             'no_warnings': True
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([video_url])
+            # CHANGED: extract_info grabs the description/caption during download
+            info = ydl.extract_info(video_url, download=True)
+            caption = info.get('description', '') or 'No caption found'
 
         print(f"⚙️ [Step 2] Processing Video | Campaign: {campaign_key}", flush=True)
         input_stream = ffmpeg.input(input_path)
@@ -77,12 +80,10 @@ def process_task(video_url, campaign_key, position_key, reply_webhook_url):
 
         if camp_data['type'] == 'video':
             asset_path = os.path.join(ASSETS_DIR, camp_data['file'])
-            # Changed -1 to -2 to prevent odd-pixel crash
             overlay_layer = ffmpeg.input(asset_path).filter('colorkey', camp_data['chroma'], 0.3, 0.2).filter('scale', 550, -2)
         elif camp_data['type'] == 'smart_image':
             brightness = get_brightness(input_path)
             logo_filename = f"Betstrike_logo_{'black' if brightness > 128 else 'white'}.png"
-            # Changed -1 to -2 to prevent odd-pixel crash
             overlay_layer = ffmpeg.input(os.path.join(ASSETS_DIR, logo_filename)).filter('scale', 550, -2)
 
         pos_map = {
@@ -95,7 +96,6 @@ def process_task(video_url, campaign_key, position_key, reply_webhook_url):
 
         final_video_stream = processed_video.overlay(overlay_layer, x=x_val, y=y_val)
 
-        # Added pix_fmt: yuv420p to ensure universal output compatibility
         output_args = {'t': '59', 'vcodec': 'libx264', 'pix_fmt': 'yuv420p', 'crf': 25, 'preset': 'ultrafast', 'threads': '1', 'r': '30'}
         if has_audio:
             output_stream = ffmpeg.output(final_video_stream, input_stream.audio, output_path, **output_args, acodec='aac')
@@ -108,12 +108,17 @@ def process_task(video_url, campaign_key, position_key, reply_webhook_url):
         print(f"🚀 [Step 3] Beaming finished video to n8n...", flush=True)
         with open(output_path, 'rb') as f:
             files = {'file': (os.path.basename(output_path), f, 'video/mp4')}
-            data = {'campaign': campaign_key, 'position': position_key} 
+            # ADDED target and caption to the n8n payload
+            data = {
+                'campaign': campaign_key, 
+                'position': position_key,
+                'target': target_key,
+                'caption': caption
+            } 
             requests.post(reply_webhook_url, files=files, data=data)
 
         print("✅ Delivery Successful!", flush=True)
 
-    # --- THE NEW ERROR CATCHER ---
     except ffmpeg.Error as e:
         print(f"❌ FFmpeg Error: {e.stderr.decode('utf8') if e.stderr else str(e)}", flush=True)
     except Exception as e:
@@ -133,7 +138,8 @@ def worker():
         if task is None:
             break
         print(f"🚦 Pulling task from queue: {task['campaign']}...", flush=True)
-        process_task(task['url'], task['campaign'], task['position'], task['webhook_reply_url'])
+        # ADDED task['target']
+        process_task(task['url'], task['campaign'], task['position'], task['target'], task['webhook_reply_url'])
         task_queue.task_done()
 
 # Boot up the single background worker thread
@@ -152,16 +158,18 @@ def process_video_api():
     video_url = data.get('url')
     campaign_key = data.get('campaign', 'rajbet')
     position_key = data.get('position', 'bottom')
+    target_key = data.get('target', 'upload_both') # EXTRACT target
     reply_webhook_url = data.get('webhook_reply_url')
 
     if not all([video_url, reply_webhook_url]):
         return jsonify({"error": "Missing URL or Reply Webhook"}), 400
 
-    # Put the job in the queue instead of running it immediately
+    # Put the job in the queue
     task_queue.put({
         'url': video_url,
         'campaign': campaign_key,
         'position': position_key,
+        'target': target_key, # STORE target in queue
         'webhook_reply_url': reply_webhook_url
     })
 
@@ -171,5 +179,3 @@ def process_video_api():
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
-
-
