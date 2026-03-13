@@ -18,13 +18,35 @@ ASSETS_DIR = "./shared/assets/Campaigns"
 os.makedirs(WORKSPACE_DIR, exist_ok=True)
 os.makedirs(ASSETS_DIR, exist_ok=True)
 
+# ADD YOUR CLOUDINARY URLS HERE!
 CAMPAIGN_CONFIG = {
-    'rajbet':   {'file': 'RajBet-LOGO.mp4',   'type': 'video', 'chroma': '0x0000FF'}, 
-    'leonbet':  {'file': 'LEONBET-LOGO.mp4',  'type': 'video', 'chroma': '0x0000FF'}, 
-    'tucanbit': {'file': 'TUCANBIT.mp4',      'type': 'video', 'chroma': '0x00FF00'}, 
-    'bitz':     {'file': 'Bitz.io-LOGO.mp4',  'type': 'video', 'chroma': '0x00FF00'}, 
-    'betstrike':{'file': 'SMART_DETECT',      'type': 'smart_image'} 
+    'rajbet':   {'url': 'YOUR_CLOUDINARY_RAJBET_URL.mp4',   'file': 'RajBet-LOGO.mp4',   'type': 'video', 'chroma': '0x0000FF'}, 
+    'leonbet':  {'url': 'YOUR_CLOUDINARY_LEONBET_URL.mp4',  'file': 'LEONBET-LOGO.mp4',  'type': 'video', 'chroma': '0x0000FF'}, 
+    'tucanbit': {'url': 'YOUR_CLOUDINARY_TUCANBIT_URL.mp4', 'file': 'TUCANBIT.mp4',      'type': 'video', 'chroma': '0x00FF00'}, 
+    'bitz':     {'url': 'YOUR_CLOUDINARY_BITZ_URL.mp4',     'file': 'Bitz.io-LOGO.mp4',  'type': 'video', 'chroma': '0x00FF00'}, 
+    'betstrike':{'file': 'SMART_DETECT',                    'type': 'smart_image'} 
 }
+
+# --- AUTO-DOWNLOADER FOR CLOUDINARY ASSETS ---
+def get_asset(campaign_key):
+    camp_data = CAMPAIGN_CONFIG.get(campaign_key)
+    
+    if camp_data['type'] == 'smart_image':
+        return ASSETS_DIR
+
+    local_path = os.path.join(ASSETS_DIR, camp_data['file'])
+
+    if not os.path.exists(local_path):
+        print(f"⬇️ Downloading {camp_data['file']} from Cloudinary...", flush=True)
+        response = requests.get(camp_data['url'], stream=True)
+        response.raise_for_status() 
+        
+        with open(local_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        print("✅ Asset downloaded successfully!", flush=True)
+
+    return local_path
 
 # --- THE QUEUE SYSTEM ---
 task_queue = queue.Queue()
@@ -45,12 +67,11 @@ def get_brightness(video_path):
         print(f"Warning: Brightness calc failed: {e}", flush=True)
         return 128 
 
-# ADDED target_key to arguments
 def process_task(video_url, campaign_key, position_key, target_key, reply_webhook_url):
     timestamp = int(time.time())
     input_path = os.path.join(WORKSPACE_DIR, f"raw_{timestamp}.mp4")
     output_path = os.path.join(WORKSPACE_DIR, f"final_{timestamp}.mp4")
-    caption = "No caption found" # Default fallback
+    caption = "No caption found" 
 
     try:
         print(f"📥 [Step 1] Downloading: {video_url}", flush=True)
@@ -62,7 +83,6 @@ def process_task(video_url, campaign_key, position_key, target_key, reply_webhoo
             'no_warnings': True
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # CHANGED: extract_info grabs the description/caption during download
             info = ydl.extract_info(video_url, download=True)
             caption = info.get('description', '') or 'No caption found'
 
@@ -79,7 +99,8 @@ def process_task(video_url, campaign_key, position_key, target_key, reply_webhoo
         overlay_layer = None
 
         if camp_data['type'] == 'video':
-            asset_path = os.path.join(ASSETS_DIR, camp_data['file'])
+            # CHANGED: Now uses get_asset() to pull from Cloudinary if missing!
+            asset_path = get_asset(campaign_key)
             overlay_layer = ffmpeg.input(asset_path).filter('colorkey', camp_data['chroma'], 0.3, 0.2).filter('scale', 550, -2)
         elif camp_data['type'] == 'smart_image':
             brightness = get_brightness(input_path)
@@ -108,7 +129,6 @@ def process_task(video_url, campaign_key, position_key, target_key, reply_webhoo
         print(f"🚀 [Step 3] Beaming finished video to n8n...", flush=True)
         with open(output_path, 'rb') as f:
             files = {'file': (os.path.basename(output_path), f, 'video/mp4')}
-            # ADDED target and caption to the n8n payload
             data = {
                 'campaign': campaign_key, 
                 'position': position_key,
@@ -132,17 +152,14 @@ def process_task(video_url, campaign_key, position_key, target_key, reply_webhoo
 
 # --- BACKGROUND WORKER ENGINE ---
 def worker():
-    """This engine runs in the background and processes the queue one by one."""
     while True:
         task = task_queue.get()
         if task is None:
             break
         print(f"🚦 Pulling task from queue: {task['campaign']}...", flush=True)
-        # ADDED task['target']
         process_task(task['url'], task['campaign'], task['position'], task['target'], task['webhook_reply_url'])
         task_queue.task_done()
 
-# Boot up the single background worker thread
 worker_thread = threading.Thread(target=worker, daemon=True)
 worker_thread.start()
 
@@ -158,18 +175,17 @@ def process_video_api():
     video_url = data.get('url')
     campaign_key = data.get('campaign', 'rajbet')
     position_key = data.get('position', 'bottom')
-    target_key = data.get('target', 'upload_both') # EXTRACT target
+    target_key = data.get('target', 'upload_both') 
     reply_webhook_url = data.get('webhook_reply_url')
 
     if not all([video_url, reply_webhook_url]):
         return jsonify({"error": "Missing URL or Reply Webhook"}), 400
 
-    # Put the job in the queue
     task_queue.put({
         'url': video_url,
         'campaign': campaign_key,
         'position': position_key,
-        'target': target_key, # STORE target in queue
+        'target': target_key,
         'webhook_reply_url': reply_webhook_url
     })
 
