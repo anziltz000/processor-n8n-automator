@@ -18,13 +18,26 @@ ASSETS_DIR = "./shared/assets/Campaigns"
 os.makedirs(WORKSPACE_DIR, exist_ok=True)
 os.makedirs(ASSETS_DIR, exist_ok=True)
 
-# ADD YOUR CLOUDINARY URLS HERE!
+# ACTIVE CAMPAIGNS & CLOUDINARY URLS
 CAMPAIGN_CONFIG = {
-    'rajbet':   {'url': 'YOUR_CLOUDINARY_RAJBET_URL.mp4',   'file': 'RajBet-LOGO.mp4',   'type': 'video', 'chroma': '0x0000FF'}, 
-    'leonbet':  {'url': 'YOUR_CLOUDINARY_LEONBET_URL.mp4',  'file': 'LEONBET-LOGO.mp4',  'type': 'video', 'chroma': '0x0000FF'}, 
-    'tucanbit': {'url': 'YOUR_CLOUDINARY_TUCANBIT_URL.mp4', 'file': 'TUCANBIT.mp4',      'type': 'video', 'chroma': '0x00FF00'}, 
-    'bitz':     {'url': 'YOUR_CLOUDINARY_BITZ_URL.mp4',     'file': 'Bitz.io-LOGO.mp4',  'type': 'video', 'chroma': '0x00FF00'}, 
-    'betstrike':{'file': 'SMART_DETECT',                    'type': 'smart_image'} 
+    'leonbet':  {
+        'url': 'https://res.cloudinary.com/dd2zxjcon/video/upload/v1773424961/assets/Campaigns/LEONBET-LOGO.mp4',
+        'file': 'LEONBET-LOGO.mp4',  
+        'type': 'video', 
+        'chroma': '0x0000FF' # Blue Screen
+    }, 
+    'bitz': {
+        'url': 'https://res.cloudinary.com/dd2zxjcon/video/upload/v1773424848/assets/Campaigns/Bitz.io-LOGO.mp4',     
+        'file': 'Bitz.io-LOGO.mp4',  
+        'type': 'video', 
+        'chroma': '0x00FF00' # Green Screen
+    }, 
+    'acebet': {
+        'url': 'https://res.cloudinary.com/dd2zxjcon/video/upload/v1773468197/assets/Campaigns/ACEBET-LOGO.mp4',
+        'file': 'ACEBET-LOGO.mp4',
+        'type': 'video',
+        'chroma': '0x0000FF' #Blue Screen
+    }
 }
 
 # --- AUTO-DOWNLOADER FOR CLOUDINARY ASSETS ---
@@ -99,7 +112,6 @@ def process_task(video_url, campaign_key, position_key, target_key, reply_webhoo
         overlay_layer = None
 
         if camp_data['type'] == 'video':
-            # CHANGED: Now uses get_asset() to pull from Cloudinary if missing!
             asset_path = get_asset(campaign_key)
             overlay_layer = ffmpeg.input(asset_path).filter('colorkey', camp_data['chroma'], 0.3, 0.2).filter('scale', 550, -2)
         elif camp_data['type'] == 'smart_image':
@@ -173,7 +185,7 @@ def health_check():
 def process_video_api():
     data = request.json
     video_url = data.get('url')
-    campaign_key = data.get('campaign', 'rajbet')
+    campaign_key = data.get('campaign', 'leonbet')
     position_key = data.get('position', 'bottom')
     target_key = data.get('target', 'upload_both') 
     reply_webhook_url = data.get('webhook_reply_url')
