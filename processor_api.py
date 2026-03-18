@@ -37,6 +37,13 @@ CAMPAIGN_CONFIG = {
         'file': 'ACEBET-LOGO.mp4',
         'type': 'video',
         'chroma': '0x0000FF' #Blue Screen
+    },
+
+    'rajbet':  { 
+        'url': 'https://res.cloudinary.com/dd2zxjcon/video/upload/v1773424616/assets/Campaigns/RajBet-LOGO.mp4', 
+        'file': 'RajBet-LOGO.mp4',   
+        'type': 'video',  
+        'chroma': '0x0000FF' # Blue Screen 
     }
 }
 
